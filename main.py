@@ -119,6 +119,10 @@ def demo_mode():
 
 def main():
     """Main entry point"""
+    # Validate configuration
+    if not config.validate_config():
+        sys.exit(1)
+    
     if len(sys.argv) > 1:
         if sys.argv[1] == "--demo" or sys.argv[1] == "-d":
             demo_mode()
