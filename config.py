@@ -6,11 +6,8 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Mistral API Configuration
-# Get your API key at: https://console.mistral.ai/
 MISTRAL_API_KEY: str = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_MODEL: str = "mistral-large-latest"
 

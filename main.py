@@ -124,16 +124,28 @@ def main():
         sys.exit(1)
     
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--demo" or sys.argv[1] == "-d":
+        if sys.argv[1] in ("--demo", "-d"):
             demo_mode()
-        elif sys.argv[1] == "--help" or sys.argv[1] == "-h":
+        elif sys.argv[1] in ("--help", "-h"):
             print("Usage: python main.py [OPTIONS]")
             print()
             print("Options:")
-            print("  -d, --demo    Run with demo email")
-            print("  -h, --help    Show this help message")
+            print("  -d, --demo        Run with demo email")
+            print("  -s, --streamlit   Launch Streamlit UI")
+            print("  -h, --help        Show this help message")
             print()
             print("Without options, runs in interactive mode")
+        elif sys.argv[1] in ("--streamlit", "-s"):
+            # delegate to streamlit runtime
+            try:
+                import streamlit.web.cli as stcli  # type: ignore
+            except ImportError:
+                print("Streamlit is not installed. Please install with `pip install streamlit`.")
+                sys.exit(1)
+
+            # re-run the script under streamlit
+            sys.argv = ["streamlit", "run", "streamlit_app.py"]
+            sys.exit(stcli.main())
         else:
             print(f"Unknown option: {sys.argv[1]}")
             print("Use --help for usage information")

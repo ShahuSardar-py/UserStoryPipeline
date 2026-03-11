@@ -3,7 +3,7 @@ User Story Generator Agent - Node 3 of the LangGraph workflow
 
 This agent generates user stories from:
 - Requirement Document (for new_rfq)
-- Change Request Document + existing stories (for change_request)
+- Change Request Document + new_requirements (for change_request)
 """
 
 from typing import List
@@ -111,14 +111,17 @@ def generate_user_stories_from_change_request(state: GraphState) -> GraphState:
     """
     Generate user stories from Change Request Document
     
+    Uses new_requirements (filtered by backlog checker) to generate only NEW stories
+    
     Args:
-        state: Current graph state with change_request_doc and existing_stories
+        state: Current graph state with change_request_doc, existing_stories, new_requirements
         
     Returns:
         Updated state with generated_stories
     """
     change_request_doc = state.get("change_request_doc")
     existing_stories = state.get("existing_stories", [])
+    new_requirements = state.get("new_requirements", [])
     
     if not change_request_doc:
         return {
@@ -128,17 +131,27 @@ def generate_user_stories_from_change_request(state: GraphState) -> GraphState:
             "message": "Missing change request document"
         }
     
+    # If no new requirements, return existing stories info
+    if not new_requirements:
+        return {
+            **state,
+            "generated_stories": [],
+            "stories_error": None,
+            "status": "success",
+            "message": "All requirements already exist in backlog"
+        }
+    
     try:
         agent = create_user_story_generator()
         
-        # Build context from change request
+        # Build context from change request - use NEW requirements only
         cr_id = change_request_doc.get("cr_id", "Unknown")
         cr_title = change_request_doc.get("title", "No Title")
         cr_description = change_request_doc.get("description", "")
-        changes = change_request_doc.get("changes", [])
-        affected = change_request_doc.get("affected_stories", [])
         priority = change_request_doc.get("priority", "Medium")
         
+        # Use new_requirements (filtered by backlog checker) instead of all changes
+        changes = new_requirements
         changes_text = "\n".join([f"{i+1}. {change}" for i, change in enumerate(changes)])
         
         if existing_stories:
@@ -149,32 +162,33 @@ def generate_user_stories_from_change_request(state: GraphState) -> GraphState:
         
         prompt = f"""You are a User Story Generator Agent specialized in creating user stories for change requests.
 
-Based on the following Change Request Document and existing stories, generate updated or new user stories.
+Based on the following NEW Change Request Requirements (only new requirements not in backlog), generate user stories.
+
+Note: The following requirements ALREADY exist and should NOT be included:
+{existing_text}
+
+NEW Change Request Requirements to implement:
+{changes_text}
 
 Change Request:
 - ID: {cr_id}
 - Title: {cr_title}
 - Description: {cr_description}
-- Changes Requested:
-{changes_text}
-- Affected Existing Stories:
-{existing_text}
 - Priority: {priority}
 
 Instructions:
-1. Analyze the change request and determine what needs to be modified
-2. Generate new user stories OR update existing stories based on the change request
-3. Each story should have:
-   - Unique story ID (format: STORY-XXX or CR-STORY-XXX for change request stories)
+1. Generate ONLY for the NEW requirements listed above
+2. Each story should have:
+   - Unique story ID (format: CR-STORY-XXX for change request stories)
    - Clear title reflecting the change
    - Detailed description of what changed
    - Acceptance criteria for the change
    - Priority (from the document)
    - Status: "To Do"
    - Link to the change request ID
-4. If updating existing stories, reference the original story ID
+3. Do NOT generate stories for requirements that already exist
 
-Return a list of user stories."""
+Return a list of user stories for the NEW requirements only."""
 
         result: UserStoriesOutput = agent.invoke(prompt)
         

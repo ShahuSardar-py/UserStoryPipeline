@@ -47,18 +47,6 @@ def create_email_parser_agent() -> ChatMistralAI:
 def parse_email(state: GraphState) -> GraphState:
     """
     Email Parser Agent Node
-    
-    Parses the raw email and extracts:
-    - Email type (new_rfq or change_request)
-    - Sender information
-    - Subject
-    - Extracted requirements/info
-    
-    Args:
-        state: Current graph state with raw_email
-        
-    Returns:
-        Updated state with parsed information
     """
     raw_email = state.get("raw_email", "")
     email_subject = state.get("email_subject", "")
@@ -73,10 +61,9 @@ def parse_email(state: GraphState) -> GraphState:
         }
     
     try:
-        # Create the agent
+     
         agent = create_email_parser_agent()
         
-        # Create prompt for the agent
         prompt = f"""You are an Email Parser Agent specialized in analyzing requests for software development projects.
 
 Your task is to classify the incoming email and extract relevant information.
@@ -132,15 +119,5 @@ Return the structured output with all extracted information."""
         }
 
 
-# For testing purposes
-if __name__ == "__main__":
-    test_state: GraphState = {
-        "raw_email": "Hello, I would like to request a new feature for our inventory management system. We need to add a supplier management module with the following requirements:\n\n1. Add new suppliers\n2. Edit existing supplier information\n3. View supplier list\n4. Delete suppliers\n\nPlease provide a quote for this development.\n\nBest regards,\nJohn from ABC Corp",
-        "email_subject": "New Feature Request - Supplier Management",
-        "email_sender": "john@abccorp.com"
-    }
-    
-    result = parse_email(test_state)
-    print("Email Type:", result.get("email_type"))
-    print("Parsed Email:", result.get("parsed_email"))
+
 

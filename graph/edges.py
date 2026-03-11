@@ -71,14 +71,17 @@ def route_after_backlog_checker(state: GraphState) -> Literal["user_story_genera
         Next node to route to
     """
     is_duplicate = state.get("is_duplicate", False)
+    new_requirements = state.get("new_requirements", [])
     
-    if is_duplicate:
+    # If all requirements are duplicates, handle as duplicate
+    if is_duplicate and not new_requirements:
         return "handle_duplicate"
+    # If there are new requirements, generate stories for them
     else:
         return "user_story_generator"
 
 
-def route_after_user_story_generator(state: GraphState) -> Literal["excel_writer", "handle_error"]:
+def route_after_user_story_generator(state: GraphState) -> Literal["excel_writer", "handle_error", "handle_duplicate"]:
     """
     Route after User Story Generator
     
@@ -89,9 +92,13 @@ def route_after_user_story_generator(state: GraphState) -> Literal["excel_writer
         Next node to route to
     """
     stories_error = state.get("stories_error")
+    generated_stories = state.get("generated_stories", [])
     
     if stories_error:
         return "handle_error"
+    elif len(generated_stories) == 0:
+        # No new stories were generated (all requirements already exist)
+        return "handle_duplicate"
     else:
         return "excel_writer"
 

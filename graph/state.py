@@ -80,6 +80,7 @@ class GraphState(TypedDict):
     # After Backlog Checker (for change requests)
     existing_stories: List[UserStory]
     is_duplicate: bool
+    new_requirements: List[str]  # NEW: requirements not in backlog
     
     # After User Story Generator
     generated_stories: List[UserStory]

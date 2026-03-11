@@ -3,13 +3,14 @@ Backlog Checker Tool - Check Excel backlog for existing user stories
 
 This tool is used for change_request emails to check if:
 - Similar requests already exist in the backlog
-- New stories need to be generated or existing ones modified
+- NEW requirements that don't match existing stories
+- Returns both existing (duplicate) and new requirements separately
 """
 
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
-from graph.state import GraphState, UserStory
+from graph.state import GraphState, UserStory, EmailType
 
 
 def read_excel_backlog(file_path: str, sheet_name: str = "UserStories") -> pd.DataFrame:
@@ -24,7 +25,6 @@ def read_excel_backlog(file_path: str, sheet_name: str = "UserStories") -> pd.Da
         DataFrame containing the backlog
     """
     if not os.path.exists(file_path):
-        # Return empty DataFrame if file doesn't exist
         return pd.DataFrame(columns=[
             "Story ID", "Title", "Description", "Acceptance Criteria",
             "Priority", "Status", "Related Requirement", "Related CR"
@@ -41,79 +41,83 @@ def read_excel_backlog(file_path: str, sheet_name: str = "UserStories") -> pd.Da
 def check_existing_stories(
     change_request_doc: Dict[str, Any],
     backlog_df: pd.DataFrame
-) -> tuple[List[UserStory], bool]:
+) -> Tuple[List[UserStory], List[str]]:
     """
-    Check if similar stories already exist in the backlog
+    Check which changes already exist and which are new
     
     Args:
         change_request_doc: The change request document
         backlog_df: DataFrame of existing stories
         
     Returns:
-        Tuple of (existing_stories, is_duplicate)
+        Tuple of (existing_stories, new_requirements not in backlog)
     """
     if backlog_df.empty:
-        return [], False
+        return [], change_request_doc.get("changes", [])
     
-    # Extract keywords from change request
-    cr_title = change_request_doc.get("title", "").lower()
-    cr_description = change_request_doc.get("description", "").lower()
-    cr_changes = " ".join(change_request_doc.get("changes", [])).lower()
-    
-    search_text = f"{cr_title} {cr_description} {cr_changes}"
-    search_keywords = [word for word in search_text.split() if len(word) > 3]
-    
+    changes = change_request_doc.get("changes", [])
     existing_stories: List[UserStory] = []
+    new_requirements: List[str] = []
     
-    for _, row in backlog_df.iterrows():
-        title = str(row.get("Title", "")).lower()
-        description = str(row.get("Description", "")).lower()
+    for change in changes:
+        change_lower = change.lower()
+        change_keywords = [word for word in change_lower.split() if len(word) > 3]
         
-        # Check for keyword matches
-        matches = sum(1 for kw in search_keywords if kw in title or kw in description)
+        matched_story = None
+        max_matches = 0
         
-        if matches >= 2:  # At least 2 keyword matches
-            story: UserStory = {
-                "story_id": str(row.get("Story ID", "")),
-                "title": str(row.get("Title", "")),
-                "description": str(row.get("Description", "")),
-                "acceptance_criteria": str(row.get("Acceptance Criteria", "")).split("|"),
-                "priority": str(row.get("Priority", "Medium")),
-                "status": str(row.get("Status", "To Do")),
-                "related_requirement": str(row.get("Related Requirement", "")),
-                "related_cr": str(row.get("Related CR", ""))
-            }
-            existing_stories.append(story)
+        for _, row in backlog_df.iterrows():
+            title = str(row.get("Title", "")).lower()
+            description = str(row.get("Description", "")).lower()
+            
+            matches = sum(1 for kw in change_keywords if kw in title or kw in description)
+            
+            if matches > max_matches:
+                max_matches = matches
+                matched_story = {
+                    "story_id": str(row.get("Story ID", "")),
+                    "title": str(row.get("Title", "")),
+                    "description": str(row.get("Description", "")),
+                    "acceptance_criteria": str(row.get("Acceptance Criteria", "")).split("|"),
+                    "priority": str(row.get("Priority", "Medium")),
+                    "status": str(row.get("Status", "To Do")),
+                    "related_requirement": str(row.get("Related Requirement", "")),
+                    "related_cr": str(row.get("Related CR", ""))
+                }
+        
+        if max_matches >= 2 and matched_story:
+            existing_stories.append(matched_story)
+        else:
+            new_requirements.append(change)
     
-    # Consider it a duplicate if we found closely matching stories
-    is_duplicate = len(existing_stories) > 0
-    
-    return existing_stories, is_duplicate
+    return existing_stories, new_requirements
 
 
 def backlog_checker_node(state: GraphState) -> GraphState:
     """
     Backlog Checker Node
     
-    For change_request emails, checks if similar stories exist
+    For change_request emails, checks:
+    - Which changes already exist (duplicates)
+    - Which changes are NEW and need new stories
     
     Args:
         state: Current graph state
         
     Returns:
-        Updated state with existing_stories and is_duplicate
+        Updated state with existing_stories and new_requirements
     """
     from config import BACKLOG_FILE_PATH, BACKLOG_SHEET_NAME
     
     email_type = state.get("email_type")
     change_request_doc = state.get("change_request_doc")
     
-    # Only run for change requests
-    if email_type != "change_request":
+    if email_type != EmailType.CHANGE_REQUEST:
         return {
             **state,
             "existing_stories": [],
-            "is_duplicate": False
+            "is_duplicate": False,
+            "new_requirements": []
         }
     
     if not change_request_doc:
@@ -121,20 +125,27 @@ def backlog_checker_node(state: GraphState) -> GraphState:
             **state,
             "existing_stories": [],
             "is_duplicate": False,
+            "new_requirements": [],
             "content_error": "No change request document available for backlog check"
         }
     
     try:
-        # Read the backlog
         backlog_df = read_excel_backlog(BACKLOG_FILE_PATH, BACKLOG_SHEET_NAME)
         
-        # Check for existing stories
-        existing_stories, is_duplicate = check_existing_stories(change_request_doc, backlog_df)
+        existing_stories, new_requirements = check_existing_stories(change_request_doc, backlog_df)
+        
+        updated_cr_doc = change_request_doc.copy()
+        updated_cr_doc["changes"] = new_requirements
+        updated_cr_doc["new_requirements"] = new_requirements
+        
+        has_new_requirements = len(new_requirements) > 0
         
         return {
             **state,
             "existing_stories": existing_stories,
-            "is_duplicate": is_duplicate,
+            "is_duplicate": not has_new_requirements,
+            "new_requirements": new_requirements,
+            "change_request_doc": updated_cr_doc,
             "status": "processing"
         }
         
@@ -143,6 +154,7 @@ def backlog_checker_node(state: GraphState) -> GraphState:
             **state,
             "existing_stories": [],
             "is_duplicate": False,
+            "new_requirements": change_request_doc.get("changes", []) if change_request_doc else [],
             "content_error": f"Failed to check backlog: {str(e)}"
         }
 

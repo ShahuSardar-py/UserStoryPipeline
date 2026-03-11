@@ -80,7 +80,8 @@ def create_workflow() -> StateGraph:
         route_after_user_story_generator,
         {
             "excel_writer": "excel_writer",
-            "handle_error": "handle_error"
+            "handle_error": "handle_error",
+            "handle_duplicate": "handle_duplicate"
         }
     )
     
@@ -176,6 +177,7 @@ def run_workflow(email_content: str, subject: str = "", sender: str = "") -> Gra
         "content_error": None,
         "existing_stories": [],
         "is_duplicate": False,
+        "new_requirements": [],
         "generated_stories": [],
         "stories_error": None,
         "status": "pending",
